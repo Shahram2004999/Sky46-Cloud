@@ -1,0 +1,1 @@
+'use client'\n\nimport DashboardOverview from '@/components/dashboard/DashboardOverview'\n\nexport default function DashboardPage() {\n  return <DashboardOverview />\n}\n
