@@ -1,0 +1,252 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// User Model
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  name      String
+  avatar    String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  ecsInstances   ECSInstance[]
+  obsBuckets     OBSBucket[]
+  swrRepositories SWRRepository[]
+  trainingJobs   TrainingJob[]
+  models         Model[]
+  deployments    Deployment[]
+  endpoints      Endpoint[]
+  activityLogs   ActivityLog[]
+}
+
+// ECS Instance Model
+model ECSInstance {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String
+  os           String   // Ubuntu 22.04, Ubuntu 24.04, CentOS, Windows Server
+  size         String   // Small, Medium, Large
+  status       String   @default("Stopped") // Running, Stopped, Terminated
+  ipAddress    String   @default("192.168.1.1")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  trainingJobs TrainingJob[]
+}
+
+// OBS Bucket Model
+model OBSBucket {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String
+  storageType  String   // Standard, Archive, Cold
+  status       String   @default("Active")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  files        OBSFile[]
+  datasets     Dataset[]
+}
+
+// OBS File Model
+model OBSFile {
+  id           String   @id @default(cuid())
+  bucketId     String
+  bucket       OBSBucket @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  
+  name         String
+  size         Int      // in bytes
+  fileType     String   // zip, csv, json, txt, image
+  obsPath      String   @unique
+  status       String   @default("Available")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  datasets     Dataset[]
+}
+
+// SWR Repository Model
+model SWRRepository {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String
+  visibility   String   // Public, Private
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  images       ContainerImage[]
+}
+
+// Container Image Model
+model ContainerImage {
+  id           String   @id @default(cuid())
+  repositoryId String
+  repository   SWRRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  
+  tag          String   // pytorch:latest, tensorflow:latest, etc.
+  status       String   @default("Available")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  trainingJobs TrainingJob[]
+}
+
+// Dataset Model
+model Dataset {
+  id           String   @id @default(cuid())
+  bucketId     String
+  bucket       OBSBucket @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  
+  fileIds      String   // JSON array of file IDs
+  status       String   @default("Ready")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  trainingJobs TrainingJob[]
+}
+
+// Training Job Model
+model TrainingJob {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  ecsInstanceId String
+  ecsInstance  ECSInstance @relation(fields: [ecsInstanceId], references: [id], onDelete: Cascade)
+  
+  datasetId    String
+  dataset      Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  
+  imageId      String
+  image        ContainerImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  
+  name         String
+  framework    String   // PyTorch, TensorFlow, Scikit-Learn
+  epochs       Int
+  batchSize    Int
+  learningRate Float
+  
+  status       String   @default("Initializing") // Initializing, Running, Completed, Failed
+  progress     Int      @default(0) // 0-100
+  logs         String   @default("") // JSON array of log entries
+  
+  modelId      String?
+  model        Model?   @relation(fields: [modelId], references: [id])
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Model Registry Model
+model Model {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String
+  version      String
+  framework    String   // PyTorch, TensorFlow, Scikit-Learn
+  
+  trainingJobIds String // JSON array
+  status       String   @default("Registered")
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  deployments  Deployment[]
+}
+
+// Deployment Model
+model Deployment {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  modelId      String
+  model        Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  
+  name         String
+  replicaCount Int      @default(1)
+  status       String   @default("Deploying") // Deploying, Running, Failed
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  endpoints    Endpoint[]
+}
+
+// Endpoint Model
+model Endpoint {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  deploymentId String
+  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  
+  url          String   @unique
+  status       String   @default("Active")
+  
+  requestCount Int      @default(0)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  predictions  Prediction[]
+}
+
+// Prediction Model (for endpoint testing)
+model Prediction {
+  id           String   @id @default(cuid())
+  endpointId   String
+  endpoint     Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  
+  inputData    String   // JSON
+  outputData   String   // JSON
+  
+  createdAt    DateTime @default(now())
+}
+
+// Activity Log Model
+model ActivityLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action       String
+  resourceType String
+  resourceId   String
+  details      String   // JSON
+  
+  createdAt    DateTime @default(now())
+}
