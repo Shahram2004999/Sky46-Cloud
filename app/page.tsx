@@ -1,0 +1,1 @@
+'use client'\n\nimport { useRouter } from 'next/navigation'\nimport { useEffect } from 'react'\n\nexport default function Home() {\n  const router = useRouter()\n\n  useEffect(() => {\n    router.push('/dashboard')\n  }, [])\n\n  return null\n}\n
